@@ -164,6 +164,12 @@ class ConversionArguments:
             "help": "Path where the converted model will be saved to."
         }
     )
+    print_orion_incompat_nodes: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to print the nodes that are not compatible with the Orion layer."
+        }
+    )
 
     task: Optional[str] = field(
         default='auto',
@@ -255,6 +261,25 @@ def get_operators(model: onnx.ModelProto) -> Set[str]:
     traverse_graph(model.graph)
     return operators
 
+def print_orion_incompat_nodes(model_names_or_paths):
+    """
+    Returns the incompatible nodes with the most current version of Orion/Giza.
+
+    In the current implmentation the supported ops are hardcoded.
+    """
+    # XXX: update this following https://cli.gizatech.xyz/frameworks/cairo/transpile#supported-operators
+    operations = {"Abs", "Acos", "Acosh", "Add", "And", "Div", "Mul", "Sub", "Argmax", "Argmin", "Asin", "Asinh", "Atan", "Relu", "Constant", "MatMul", "Gemm"}
+
+    for model in tqdm(model_names_or_paths, desc="Orion Incompatibilities"):
+        directory_path = os.path.dirname(model)
+        file_name_without_extension = os.path.splitext(
+            os.path.basename(model))[0]
+
+        loaded_model = onnx.load_model(model)
+        op_types = get_operators(loaded_model)
+        not_supported_ops = op_types - operations
+
+        print("Incompatible operators for model %s: %s" % (file_name_without_extension, not_supported_ops))
 
 def quantize(model_names_or_paths, **quantize_kwargs):
     """
@@ -523,6 +548,13 @@ def main():
             for x in os.listdir(output_model_folder)
             if x.endswith('.onnx') and not x.endswith('_quantized.onnx')
         ], **quantize_config)
+
+    if conv_args.print_orion_incompat_nodes:
+        print_orion_incompat_nodes([
+            os.path.join(output_model_folder, x)
+            for x in os.listdir(output_model_folder)
+            if x.endswith('.onnx')
+        ])
 
     # Step 3. Move .onnx files to the 'onnx' subfolder
     os.makedirs(os.path.join(output_model_folder, 'onnx'), exist_ok=True)
