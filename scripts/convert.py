@@ -164,10 +164,10 @@ class ConversionArguments:
             "help": "Path where the converted model will be saved to."
         }
     )
-    print_orion_incompat_nodes: bool = field(
+    print_incompat_nodes: bool = field(
         default=False,
         metadata={
-            "help": "Whether to print the nodes that are not compatible with the Orion layer."
+            "help": "Whether to print the nodes that are not compatible with the Orion/Cairo/Giza layer."
         }
     )
 
@@ -261,25 +261,161 @@ def get_operators(model: onnx.ModelProto) -> Set[str]:
     traverse_graph(model.graph)
     return operators
 
-def print_orion_incompat_nodes(model_names_or_paths):
+def print_incompat_nodes(model_names_or_paths):
     """
     Returns the incompatible nodes with the most current version of Orion/Giza.
 
     In the current implmentation the supported ops are hardcoded.
     """
     # XXX: update this following https://cli.gizatech.xyz/frameworks/cairo/transpile#supported-operators
-    operations = {"Abs", "Acos", "Acosh", "Add", "And", "Div", "Mul", "Sub", "Argmax", "Argmin", "Asin", "Asinh", "Atan", "Relu", "Constant", "MatMul", "Gemm"}
+    giza_operations = {
+        "Abs",
+        "Acos",
+        "Acosh",
+        "Add",
+        "And",
+        "Div",
+        "Mul",
+        "Sub",
+        "Argmax",
+        "Argmin",
+        "Asin",
+        "Asinh",
+        "Atan",
+        "Relu",
+        "Constant",
+        "MatMul",
+        "Gemm",
+        "TreeEnsembleClassifier",
+        "LinearClassifier",
+        "LinearRegressor",
+        "Softmax",
+        "Sigmoid",
+        "Concat",
+        "Squeeze",
+        "Unsqueeze",
+        "Reshape"
+    }
 
-    for model in tqdm(model_names_or_paths, desc="Orion Incompatibilities"):
+    # XXX: update this following https://orion.gizatech.xyz/framework/compatibility
+    orion_operations = {
+        "MatMul",
+        "MatMulInteger",
+        "Add",
+        "Sub",
+        "Mul",
+        "Div",
+        "Equal",
+        "Greater",
+        "GreaterOrEqual",
+        "Less",
+        "LessOrEqual",
+        "Abs",
+        "Neg",
+        "Ceil",
+        "Exp",
+        "Ln",
+        "Reshape",
+        "Transpose",
+        "ArgMax",
+        "ArgMin",
+        "ReduceSum",
+        "CumSum",
+        "Cos",
+        "Sin",
+        "Asin",
+        "Flatten",
+        "Relu",
+        "LeakyRelu",
+        "ThresholdedRelu",
+        "Sigmoid",
+        "Softmax",
+        "Softmax_zero",
+        "LogSoftmax",
+        "Softsign",
+        "Softplus",
+        "Linear",
+        "HardSigmoid",
+        "Sinh",
+        "Asinh",
+        "Atanh",
+        "Cosh",
+        "ACosh",
+        "Tanh",
+        "Acos",
+        "Sqrt",
+        "Onehot",
+        "Slice",
+        "Concat",
+        "Gather",
+        "QuantizeLinear",
+        "DequantizeLinear",
+        "QLinearMatmul",
+        "QLinearConcat",
+        "QlinearAdd",
+        "QlinearMul",
+        "QLinearLeakyRelu",
+        "Nonzero",
+        "Squeeze",
+        "Unsqueeze",
+        "Sign",
+        "Clip",
+        "Identity",
+        "And",
+        "Xor",
+        "Or",
+        "Gemm",
+        "MinInTensor",
+        "Min",
+        "Where",
+        "BitwiseAnd",
+        "BitwiseOr",
+        "BitwiseXor",
+        "Resize",
+        "Round",
+        "MaxInTensor",
+        "Max",
+        "ReduceSumSquare",
+        "Trilu",
+        "Scatter",
+        "ArrayFeatureExtractor",
+        "Binarizer",
+        "ConstantOfShape",
+        "ReduceL1",
+        "ReduceL2",
+        "GatherElements",
+        "SequenceLength",
+        "SequenceAt",
+        "SequenceConstruct",
+        "Shrink",
+        "SequenceEmpty",
+        "ReduceL2",
+        "SequenceErase",
+        "SequenceInsert",
+        "ConcatFromSequence",
+        "IsNaN",
+        "IsInf",
+        "Not",
+        "GatherND",
+        "ReduceLogSum",
+        "Erf",
+        "Compress",
+        "Layer_normalization"
+    }
+
+    for model in tqdm(model_names_or_paths, desc="Orion/Giza Incompatibilities"):
         directory_path = os.path.dirname(model)
         file_name_without_extension = os.path.splitext(
             os.path.basename(model))[0]
 
         loaded_model = onnx.load_model(model)
         op_types = get_operators(loaded_model)
-        not_supported_ops = op_types - operations
+        
+        not_supported_ops_orion = op_types - orion_operations
+        not_supported_ops_giza = op_types - giza_operations
 
-        print("Incompatible operators for model %s: %s" % (file_name_without_extension, not_supported_ops))
+        print("Incompatible operators for model %s (giza): %s" % (file_name_without_extension, not_supported_ops_giza))
+        print("Incompatible operators for model %s (orion): %s" % (file_name_without_extension, not_supported_ops_orion))
 
 def quantize(model_names_or_paths, **quantize_kwargs):
     """
@@ -549,8 +685,8 @@ def main():
             if x.endswith('.onnx') and not x.endswith('_quantized.onnx')
         ], **quantize_config)
 
-    if conv_args.print_orion_incompat_nodes:
-        print_orion_incompat_nodes([
+    if conv_args.print_incompat_nodes:
+        print_incompat_nodes([
             os.path.join(output_model_folder, x)
             for x in os.listdir(output_model_folder)
             if x.endswith('.onnx')
